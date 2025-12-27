@@ -1,0 +1,711 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <!-- Updated viewport for App-like feel (disables zooming) -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Krishi Lens - AI Agent for Farmers</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    
+    <!-- Leaflet CSS & JS (For the Map) -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin=""/>
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+        
+        /* --- Base Styles --- */
+        html, body {
+            margin: 0;
+            padding: 0;
+            height: 100%;
+            overflow-x: hidden;
+        }
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #0f1f18; /* Deep earthy green */
+            color: #f3f4f6; /* Very light gray text */
+        }
+
+        /* --- Main Container & Modal Card Styling --- */
+        .card {
+            background-color: rgba(20, 50, 35, 0.95); /* Deep green, high opacity */
+            backdrop-filter: blur(12px);
+        }
+
+        /* --- Splash Screen Animation --- */
+        @keyframes popIn {
+            0% { transform: scale(0.5); opacity: 0; }
+            70% { transform: scale(1.05); opacity: 1; }
+            100% { transform: scale(1); opacity: 1; }
+        }
+        .animate-pop {
+            animation: popIn 0.8s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
+        }
+
+        /* --- Themed Buttons --- */
+        .btn-primary {
+            padding: 0.6rem 1.25rem;
+            font-size: 0.95rem;
+            font-weight: 500;
+            border-radius: 0.75rem; /* Modern rounded corners */
+            color: #ffffff;
+            background: linear-gradient(to bottom, #d97706, #b45309); /* Amber gradient */
+            border: 1px solid #92400e;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+            transition: all 0.2s ease;
+        }
+        .btn-primary:active {
+            transform: scale(0.98);
+        }
+        .btn-primary:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            background: #78350f;
+            box-shadow: none;
+        }
+        
+        .lang-btn {
+             padding: 0.75rem;
+             font-size: 0.9rem;
+             font-weight: 500;
+             width: 100%;
+             color: #e5e7eb;
+             background-color: rgba(255, 255, 255, 0.05);
+             border: 1px solid rgba(255, 255, 255, 0.1);
+             border-radius: 0.75rem;
+             transition: all 0.2s ease;
+        }
+        .lang-btn:active {
+            background-color: rgba(16, 185, 129, 0.2);
+            border-color: rgba(16, 185, 129, 0.4);
+        }
+
+        /* --- File Upload Box --- */
+        .file-upload-box {
+            border: 2px dashed #ca8a04;
+            background-color: rgba(254, 243, 199, 0.03);
+            border-radius: 1rem;
+            padding: 2rem;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+        .file-upload-box:active {
+            background-color: rgba(254, 243, 199, 0.08);
+        }
+
+        /* --- Other Elements --- */
+        .preview-image {
+            max-width: 100%;
+            max-height: 300px;
+            object-fit: contain;
+            border-radius: 0.75rem;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+        }
+        .output-area {
+            background-color: rgba(0, 0, 0, 0.25);
+            padding: 1.25rem;
+            border-radius: 1rem;
+            border: 1px solid rgba(255, 255, 255, 0.05);
+            font-size: 0.95rem;
+            line-height: 1.6;
+        }
+        .custom-input {
+            background-color: rgba(0, 0, 0, 0.2);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            color: white;
+            font-size: 0.95rem;
+        }
+        .custom-input:focus {
+             border-color: #ca8a04;
+             outline: none;
+             background-color: rgba(0, 0, 0, 0.3);
+        }
+
+        /* --- Map Style --- */
+        #map {
+            height: 200px; /* Reduced height for better fit */
+            width: 100%;
+            border-radius: 0.75rem;
+            margin-top: 0.5rem;
+            z-index: 0;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        
+        /* Modern Scrollbar */
+        ::-webkit-scrollbar {
+            width: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: transparent;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: rgba(255, 255, 255, 0.2);
+            border-radius: 3px;
+        }
+    </style>
+</head>
+<body class="bg-[#0f1f18] flex flex-col md:items-center md:justify-center min-h-screen p-0 m-0">
+
+    <!-- SPLASH SCREEN -->
+    <div id="splashScreen" class="fixed inset-0 z-[100] bg-[#0f1f18] flex flex-col items-center justify-center transition-opacity duration-700 ease-out">
+        <div class="animate-pop text-center">
+            <div class="w-32 h-32 mx-auto mb-6 bg-white/5 rounded-full flex items-center justify-center p-4 backdrop-blur-sm border border-white/10 shadow-2xl">
+                <!-- Circular Logo Container -->
+                <img src="logo.png" alt="Krishi Lens" class="w-full h-full object-contain rounded-full">
+            </div>
+            <h1 class="text-3xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-lime-400 to-emerald-500 tracking-wider">
+                Krishi Lens
+            </h1>
+        </div>
+    </div>
+
+    <!-- Language Selection Modal -->
+    <div id="languageModal" class="fixed inset-0 bg-black/90 flex items-center justify-center z-50 transition-opacity duration-500 opacity-0 pointer-events-none backdrop-blur-sm">
+        <div class="card rounded-2xl border border-white/10 shadow-2xl p-6 m-4 max-w-sm w-full text-center transform scale-95 transition-transform duration-300" id="langCard">
+            <h2 id="languageModalTitle" class="text-xl font-bold mb-6 text-white">Choose Language</h2>
+            <div class="grid grid-cols-2 gap-3">
+                <button data-lang="en" class="lang-btn">English</button>
+                <button data-lang="hi" class="lang-btn">हिन्दी</button>
+                <button data-lang="mr" class="lang-btn">मराठी</button>
+                <button data-lang="te" class="lang-btn">తెలుగు</button>
+                <button data-lang="ml" class="lang-btn">മലയാളം</button>
+                <button data-lang="as" class="lang-btn">অসমীয়া</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Main Container -->
+    <div id="mainContainer" class="w-full min-h-screen md:h-auto md:min-h-fit md:container md:mx-auto md:max-w-xl card rounded-none md:rounded-2xl shadow-2xl p-5 md:p-8 hidden flex flex-col border-t border-white/10">
+        <header class="text-center mb-8 pt-2">
+            <!-- Main Circular Logo -->
+            <div class="mx-auto mb-4 w-20 h-20 bg-white/5 rounded-full flex items-center justify-center p-3 backdrop-blur-sm border border-white/10 shadow-lg">
+                <img src="logo.png" alt="Krishi Lens" class="w-full h-full object-contain rounded-full">
+            </div>
+            <h1 id="pageTitle" class="text-2xl font-bold text-white tracking-tight">
+                Krishi Lens
+            </h1>
+            <p id="pageSubtitle" class="mt-1 text-gray-400 text-sm font-medium">AI Partner for Smarter Farming</p>
+        </header>
+
+        <main class="flex-grow space-y-8">
+            <!-- Location Section -->
+            <section>
+                <div class="flex items-center gap-3 mb-3">
+                    <span class="flex items-center justify-center w-6 h-6 rounded-full bg-lime-500/20 text-lime-400 text-xs font-bold">1</span>
+                    <h2 id="locationTitle" class="text-lg font-semibold text-gray-200">Location Details</h2>
+                </div>
+                
+                <div class="flex flex-col gap-3">
+                    <div class="flex gap-2">
+                        <input type="text" id="locationInput" class="w-full px-4 py-2.5 rounded-xl focus:ring-1 focus:ring-amber-500 transition placeholder-gray-500 custom-input" placeholder="City, State">
+                        <button id="getLocationBtn" class="btn-primary whitespace-nowrap">
+                            Get Info
+                        </button>
+                    </div>
+                    
+                    <!-- Location Output Area -->
+                    <div id="locationOutputArea" class="output-area hidden mt-2">
+                        <div id="map" class="mb-3 border border-white/10 shadow-inner"></div>
+                        <div id="locationOutput" class="text-gray-300 text-sm mb-3"></div>
+                        <div id="weatherOutput" class="text-gray-300 text-xs">
+                            <!-- Weather chart will be injected here -->
+                        </div>
+                    </div>
+                </div>
+            </section>
+            
+            <!-- File Upload Section -->
+            <section class="pb-6">
+                <div class="flex items-center gap-3 mb-3">
+                    <span class="flex items-center justify-center w-6 h-6 rounded-full bg-amber-500/20 text-amber-400 text-xs font-bold">2</span>
+                    <h2 id="cropAnalysisSectionTitle" class="text-lg font-semibold text-gray-200">Crop Analysis</h2>
+                </div>
+
+                <div id="fileUploadBox" class="file-upload-box mb-4 text-center group">
+                    <input type="file" id="imageInput" class="hidden" accept="image/*">
+                    <div class="flex flex-col items-center justify-center py-2">
+                        <svg class="w-8 h-8 text-amber-600/80 mb-2 group-hover:scale-110 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L15 16m-2-3l4.586-4.586a2 2 0 012.828 0L21 12m-6 8h6a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v10a2 2 0 002 2z"></path>
+                        </svg>
+                        <p class="text-gray-400 text-sm font-medium">
+                            <span id="dragDropText">Tap to upload image</span>
+                        </p>
+                    </div>
+                </div>
+
+                <!-- Image Preview Area -->
+                <div id="imagePreviewContainer" class="hidden mb-4 text-center">
+                    <div class="relative inline-block">
+                        <img id="imagePreview" class="preview-image mx-auto border border-white/10" alt="Preview">
+                        <p id="imageFileName" class="mt-2 text-gray-500 text-xs truncate max-w-[200px] mx-auto"></p>
+                    </div>
+                </div>
+
+                <div class="flex justify-center mb-6">
+                    <button id="runAgentBtn" class="btn-primary w-full py-3 text-base shadow-lg shadow-amber-900/20" disabled>
+                        Analyze Crop
+                    </button>
+                </div>
+
+                <!-- Crop Analysis Output Area -->
+                <div id="cropOutputArea" class="output-area min-h-[100px]">
+                    <h3 id="analysisTitle" class="text-base font-semibold text-gray-200 mb-2 border-b border-white/10 pb-2">Analysis Report</h3>
+                    <div id="agentOutput" class="text-gray-300 text-sm leading-relaxed whitespace-pre-wrap">
+                        Report will appear here...
+                    </div>
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            // --- ELEMENT SELECTORS ---
+            const splashScreen = document.getElementById('splashScreen');
+            const languageModal = document.getElementById('languageModal');
+            const langCard = document.getElementById('langCard');
+            const mainContainer = document.getElementById('mainContainer');
+            const langButtons = document.querySelectorAll('.lang-btn');
+            const fileUploadBox = document.getElementById('fileUploadBox');
+            const imageInput = document.getElementById('imageInput');
+            const runAgentBtn = document.getElementById('runAgentBtn');
+            const agentOutputDiv = document.getElementById('agentOutput');
+            const cropOutputArea = document.getElementById('cropOutputArea');
+            const imagePreviewContainer = document.getElementById('imagePreviewContainer');
+            const imagePreview = document.getElementById('imagePreview');
+            const imageFileName = document.getElementById('imageFileName');
+            const locationInput = document.getElementById('locationInput');
+            const getLocationBtn = document.getElementById('getLocationBtn');
+            const locationOutputArea = document.getElementById('locationOutputArea');
+            const locationOutput = document.getElementById('locationOutput');
+            const weatherOutput = document.getElementById('weatherOutput');
+            const pageTitle = document.getElementById('pageTitle');
+
+            // --- SPLASH SCREEN LOGIC ---
+            setTimeout(() => {
+                splashScreen.classList.add('opacity-0');
+                languageModal.classList.remove('opacity-0', 'pointer-events-none');
+                langCard.classList.remove('scale-95');
+                langCard.classList.add('scale-100');
+                setTimeout(() => {
+                    splashScreen.style.display = 'none';
+                }, 700);
+            }, 2500);
+
+            let uploadedImageBase64 = null;
+            let currentLanguage = 'en';
+            let forecastData = null; 
+            let weatherChart = null; 
+            let mapInstance = null; 
+            
+            // --- API KEY HANDLING ---
+            const userApiKey = 'AIzaSyCDZuvOxrrG13As86mdi1rRQG3A3ANUPuE'; 
+
+            // --- TRANSLATION DATA ---
+            const translations = {
+                pageTitle: { en: 'Krishi Lens', hi: 'कृषि लेंस', mr: 'कृषी लेन्स', te: 'కృషి లెన్స్', ml: 'കൃഷി ലെൻസ്', as: 'কৃষি লেন্স' },
+                pageSubtitle: { en: 'AI Partner for Smarter Farming', hi: 'स्मार्ट खेती के लिए एआई पार्टनर', mr: 'स्मार्ट शेतीसाठी एआय पार्टनर', te: 'తెలివైన వ్యవసాయం కోసం AI', ml: 'മികച്ച കൃഷിക്കായി AI', as: 'স্মাৰ্ট কৃষিৰ বাবে এআই' },
+                locationTitle: { en: 'Location Details', hi: 'स्थान विवरण', mr: 'स्थान तपशील', te: 'స్థాన వివరాలు', ml: 'ലൊക്കേഷൻ വിവരങ്ങൾ', as: 'অৱস্থানৰ বিৱৰণ' },
+                locationPlaceholder: { en: 'City, State', hi: 'शहर, राज्य', mr: 'शहर, राज्य', te: 'నగరం, రాష్ట్రం', ml: 'നഗരം, സംസ്ഥാനം', as: 'চহৰ, ৰাজ্য' },
+                getLocationBtn: { en: 'Get Info', hi: 'जानकारी लें', mr: 'माहिती घ्या', te: 'సమాచారం', ml: 'വിവരം', as: 'তথ্য' },
+                gettingLocationInfo: { en: 'Loading...', hi: 'लोड हो रहा है...', mr: 'लोड होत आहे...', te: 'లోడ్ అవుతోంది...', ml: 'ലോഡുചെയ്യുന്നു...', as: 'লোড হৈ আছে...' },
+                locationAnalysisTitle: { en: "Location Analysis:", hi: 'स्थान विश्लेषण:', mr: 'स्थान विश्लेषण:', te: 'స్థాన విశ్లేషణ:', ml: 'ലൊക്കേഷൻ വിശകലനം:', as: 'অৱস্থান বিশ্লেষণ:' },
+                cropAnalysisSectionTitle: { en: 'Crop Analysis', hi: 'फसल विश्लेषण', mr: 'पीक विश्लेषण', te: 'పంట విశ్లేషణ', ml: 'വിള വിശകലനം', as: 'শস্য বিশ্লেষণ' },
+                dragDropText: { en: 'Tap to upload image', hi: 'छवि अपलोड करने के लिए टैप करें', mr: 'इमेज अपलोड करण्यासाठी टॅप करा', te: 'చిత్రం అప్‌లోడ్ చేయడానికి నొక్కండి', ml: 'ചിത്രം അപ്‌ലോഡ് ചെയ്യാൻ ടാപ്പ് ചെയ്യുക', as: 'ছবি আপলোড কৰিবলৈ টিপক' },
+                clickToUploadText: { en: '', hi: '', mr: '', te: '', ml: '', as: '' }, // Cleared for mobile cleaner look
+                analyzeBtn: { en: 'Analyze Crop', hi: 'विश्लेषण करें', mr: 'विश्लेषण करा', te: 'విశ్లేషించండి', ml: 'വിശകലനം', as: 'বিশ্লেষণ কৰক' },
+                analyzingBtn: { en: 'Analyzing...', hi: 'विश्लेषण...', mr: 'विश्लेषण...', te: 'విశ్లేషిస్తోంది...', ml: 'വിശകലനം...', as: 'বিশ্লেষণ...' },
+                analysisTitle: { en: "Analysis Report", hi: 'विश्लेषण रिपोर्ट', mr: 'विश्लेषण अहवाल', te: 'విశ్లేషణ నివేదిక', ml: 'വിശകലന റിപ്പോർട്ട്', as: 'বিশ্লেষণ প্ৰতিবেদন' },
+                initialAnalysisText: { en: 'Report will appear here...', hi: 'रिपोर्ट यहाँ दिखाई देगी...', mr: 'अहवाल येथे दिसेल...', te: 'నివేదిక ఇక్కడ కనిపిస్తుంది...', ml: 'റിപ്പോർട്ട് ഇവിടെ വരും...', as: 'প্ৰতিবেদন ইয়াত ওলাব...' },
+                imageUploadedText: { en: "Image uploaded. Tap 'Analyze'.", hi: "छवि अपलोड हो गई। 'विश्लेषण' दबाएं।", mr: "इमेज अपलोड झाली. 'विश्लेषण' दाबा.", te: "చిత్రం అప్‌లోడ్ చేయబడింది.", ml: "ചിത്രം അപ്‌ലോഡ് ചെയ്തു.", as: "ছবি আপলোড হৈছে।" },
+                
+                // Prompts remain largely same, just ensuring context
+                promptIntro: { en: 'You are an AI assistant for farmers. Analyze the uploaded image of a crop and provide a detailed report in simple language.', hi: 'आप किसानों के लिए एक एआई सहायक हैं। फसल की अपलोड की गई छवि का विश्लेषण करें और सरल भाषा में एक विस्तृत रिपोर्ट प्रदान करें।', mr: 'तुम्ही शेतकऱ्यांसाठी एक AI सहाय्यक आहात. पिकाच्या अपलोड केलेल्या प्रतिमेचे विश्लेषण करा आणि सोप्या भाषेत तपशीलवार अहवाल द्या.', te: 'మీరు రైతులకు AI సహాయకుడు. అప్‌లోడ్ చేయబడిన పంట చిత్రాన్ని విశ్లేషించి, సాధారణ భాషలో వివరణాత్మక నివేదికను అందించండి.', ml: 'നിങ്ങൾ കർഷകർക്കുള്ള ഒരു എഐ സഹായിയാണ്. അപ്‌ലോഡ് ചെയ്ത വിളയുടെ ചിത്രം വിശകലനം ചെയ്ത് ലളിതമായ ഭാഷയിൽ വിശദമായ റിപ്പോർട്ട് നൽകുക.', as: ' আপুনি কৃষকসকলৰ বাবে এআই সহায়ক। শস্যৰ আপলোড কৰা ছবিখন বিশ্লেষণ কৰক আৰু সৰল ভাষাত এক বিস্তৃত প্ৰতিবেদন দিয়ক।' },
+                locationPrompt: { en: 'The crop is from the following location: ', hi: 'फसल निम्नलिखित स्थान से है: ', mr: 'पीक खालील ठिकाणाहून आहे: ', te: 'పంట కింది ప్రదేశం నుండి వచ్చింది: ', ml: 'വിള ഇനിപ്പറയുന്ന സ്ഥലത്ത് നിന്നുള്ളതാണ്: ', as: ' শস্যখিনি নিম্নলিখিত স্থানৰ পৰা আহিছে: ' },
+                forecastPrompt: { en: 'Additionally, consider the following 5-day weather forecast for your recommendations:', hi: 'इसके अतिरिक्त, अपनी सिफारिशों के लिए निम्नलिखित 5-दिवसीय मौसम पूर्वानुमान पर विचार करें:', mr: 'याव्यतिरिक्त, तुमच्या शिफारशींसाठी खालील 5-दिवसांच्या हवामान अंदाजाचा विचार करा:', te: 'అదనంగా, మీ సిఫార్సుల కోసం క్రింది 5-రోజుల వాతావరణ సూచనను పరిగణించండి:', ml: 'കൂടാതെ, നിങ്ങളുടെ ശുപാർശകൾക്കായി ഇനിപ്പറയുന്ന 5 ദിവസത്തെ കാലാവസ്ഥാ പ്രവചനം പരിഗണിക്കുക:', as: ' ইয়াৰ উপৰিও, আপোনাৰ চুপাৰিছৰ বাবে নিম্নলিখিত 5-দিনীয়া বতৰৰ পূৰ্বানুমান বিবেচনা কৰক:' },
+                promptStructure: { en: 'Your response should be structured clearly with the following sections. **Bold all headings and important keywords**.', hi: 'आपकी प्रतिक्रिया निम्नलिखित अनुभागों के साथ स्पष्ट रूप से संरचित होनी चाहिए। **सभी शीर्षकों और महत्वपूर्ण खोजशब्दों को बोल्ड करें**।', mr: 'तुमचा प्रतिसाद खालील विभागांसह स्पष्टपणे संरचित असावा. **सर्व शीर्षके आणि महत्त्वाचे कीवर्ड ठळक करा**.', te: 'మీ ప్రతిస్పందన కింది విభాగాలతో స్పష్టంగా నిర్మాణాత్మకంగా ఉండాలి. **అన్ని శీర్షికలు మరియు ముఖ్యమైన కీలకపదాలను బోల్డ్ చేయండి**.', ml: 'നിങ്ങളുടെ പ്രതികരണം ഇനിപ്പറയുന്ന വിഭാഗങ്ങളോടൊപ്പം വ്യക്തമായി ചിട്ടപ്പെടുത്തണം. **എല്ലാ തലക്കെട്ടുകളും പ്രധാന കീവേഡുകളും ബോൾഡ് ചെയ്യുക**.', as: 'আপোনাৰ সঁহাৰি তলত দিয়া অংশবোৰৰ সৈতে স্পষ্টভাৱে গঠন কৰা উচিত। **সকলো শিৰোনাম আৰু গুৰুত্বপূৰ্ণ কীৱৰ্ডসমূহ গাঢ় কৰক**।' },
+                promptClarityInstruction: { 
+                    en: 'Present the entire analysis using short, clear, point-by-point bullet lists under each heading. Be concise and direct.', 
+                    hi: 'संपूर्ण विश्लेषण प्रत्येक शीर्षक के तहत छोटे, स्पष्ट, बिंदु-दर-बिंदु बुलेट सूचियों का उपयोग करके प्रस्तुत करें। संक्षिप्त और सीधे रहें।', 
+                    mr: 'प्रत्येक शीर्षकाखाली लहान, स्पष्ट, पॉइंट-बाय-पॉइंट बुलेट लिस्ट वापरून संपूर्ण विश्लेषण सादर करा. संक्षिप्त आणि थेट राहा.', 
+                    te: 'ప్రతి శీర్షిక కింద చిన్న, స్పష్టమైన, పాయింట్-బై-పాయింట్ బుల్లెట్ జాబితాలను ఉపయోగించి పూర్తి విశ్లేషణను ప్రదర్శించండి. సంక్షిప్తంగా మరియు సూటిగా ఉండండి.', 
+                    ml: 'ഓരോ തലക്കെട്ടിന് കീഴിലും ചെറുതും വ്യക്തവും പോയിന്റ് ബൈ പോയിന്റുമായ ബുള്ളറ്റ് ലിസ്റ്റുകൾ ഉപയോഗിച്ച് പൂർണ്ണമായ വിശകലനം അവതരിപ്പിക്കുക. സംക്ഷിപ്തവും നേരിട്ടുള്ളതുമായിരിക്കുക.', 
+                    as: 'প্ৰতিটো শিৰোনামৰ অধীনত চুটি, স্পষ্ট, পইণ্ট-বাই-পইণ্ট বুলেট তালিকা ব্যৱহাৰ কৰি সম্পূৰ্ণ বিশ্লেষণ উপস্থাপন কৰক। সংক্ষিপ্ত আৰু পোনপটীয়া হওক।' 
+                },
+                promptOverview: { en: 'Overview', hi: 'अवलोकन', mr: 'आढावा', te: 'అవలోకనం', ml: 'അവലോകനം', as: ' অৱলোকন' },
+                promptProblems: { en: 'Identified Problems', hi: 'पहचाने गए समस्याएँ', mr: 'ओळखलेल्या समस्या', te: 'గుర్తించబడిన సమస్యలు', ml: 'തിരിച്ചറിഞ്ഞ പ്രശ്നങ്ങൾ', as: ' চিনাক্ত কৰা সমস্যা' },
+                promptSolutions: { en: 'Suggested Solutions (considering the forecast)', hi: 'सुझाए गए समाधान (पूर्वानुमान को ध्यान में रखते हुए)', mr: 'सुचवलेले उपाय (अंदाज विचारात घेऊन)', te: 'సూచించబడిన పరిష్కారాలు (సూచనను పరిగణనలోకి తీసుకుని)', ml: 'നിർദ്ദേശിച്ച പരിഹാരങ്ങൾ (പ്രവചനം കണക്കിലെടുത്ത്)', as: ' প্ৰস্তাৱিত সমাধান (পূৰ্বানুমান বিবেচনা কৰি)' },
+                promptFollowUp: { en: 'Follow-up Actions', hi: 'आगे की कार्रवाई', mr: 'पुढील कार्यवाही', te: 'తదుపరి చర్యలు', ml: 'തുടർനടപടികൾ', as: 'পৰৱৰ্তী কাৰ্য্য' },
+                locationProfilePrompt: { en: `Provide a concise agricultural profile for farmers in "{location}". The response should be in simple language and cover: Soil Types, Suitable Crops, and Potential Challenges. Do not include climate or weather information, as it is being provided by a live weather feed.`, hi: `"{location}" में किसानों के लिए एक संक्षिप्त कृषि प्रोफ़ाइल प्रदान करें। प्रतिक्रिया सरल भाषा में होनी चाहिए और इसमें शामिल होना चाहिए: मिट्टी के प्रकार, उपयुक्त फसलें, और संभावित चुनौतियाँ। जलवायु या मौसम की जानकारी शामिल न करें, क्योंकि यह एक लाइव वेदर फीड द्वारा प्रदान की जा रही है।`, mr: `"{location}" मधील शेतकऱ्यांसाठी एक संक्षिप्त कृषी प्रोफाइल प्रदान करा. प्रतिसाद सोप्या भाषेत असावा आणि त्यात समाविष्ट असावे: मातीचे प्रकार, योग्य पिके, आणि संभाव्य आव्हाने. हवामान किंवा हवामानाची माहिती समाविष्ट करू नका, कारण ती थेट हवामान फीडद्वारे प्रदान केली जात आहे.`, te: `"{location}"లోని రైతులకు సంక్షిప్త వ్యవసాయ ప్రొఫైల్‌ను అందించండి. ప్రతిస్పందన సరళమైన భాషలో ఉండాలి మరియు కవర్ చేయాలి: నేల రకాలు, అనువైన పంటలు, మరియు సంభావ్య సవాళ్లు. వాతావరణం లేదా వాతావరణ సమాచారాన్ని చేర్చవద్దు, ఎందుకంటే ఇది ప్రత్యక్ష వాతావరణ ఫీడ్ ద్వారా అందించబడుతోంది.`, ml: `"{location}" ലെ കർഷകർക്കായി ഒരു സംക്ഷിപ്ത കാർഷിക പ്രൊഫൈൽ നൽകുക. പ്രതികരണം ലളിതമായ ഭാഷയിലായിരിക്കണം കൂടാതെ ഇനിപ്പറയുന്നവ ഉൾക്കൊള്ളണം: മണ്ണിന്റെ തരം, അനുയോജ്യമായ വിളകൾ, സാധ്യതയുള്ള വെല്ലുവിളികൾ. കാലാവസ്ഥാ വിവരങ്ങൾ ഉൾപ്പെടുത്തരുത്, കാരണം ഇത് ഒരു തത്സമയ കാലാവസ്ഥാ ഫീഡ് വഴിയാണ് നൽകുന്നത്.`, as: `"{location}"-ৰ কৃষকসকলৰ বাবে এক সংক্ষিপ্ত কৃষি প্ৰফাইল দিয়ক। সঁহাৰিটো সৰল ভাষাত হ'b লাগে আৰু সামৰি ল'b লাগে: মাটিৰ প্ৰকাৰ, উপযুক্ত শস্য, আৰু সম্ভাব্য প্ৰত্যাহ্বান। জলবায়ু বা বতৰৰ তথ্য অন্তৰ্ভুক্ত নকৰিব, কিয়নো ই এক লাইভ বতৰ ফীডৰ দ্বাৰা প্ৰদান কৰা হৈছে।` },
+                weatherTitle: { en: '5-Day Weather Forecast', hi: '5-दिवसीय मौसम पूर्वानुमान', mr: '5-दिवसांचा हवामान अंदाज', te: '5-రోజుల వాతావరణ సూచన', ml: '5 ദിവസത്തെ കാലാവസ്ഥാ പ്രവചനം', as: '৫-দিনীয়া বতৰৰ পূৰ্বানুমান' },
+            };
+            
+            // --- LANGUAGE FUNCTIONALITY ---
+            function changeLanguage(lang) {
+                currentLanguage = lang;
+                pageTitle.textContent = translations.pageTitle[lang];
+                document.getElementById('pageSubtitle').textContent = translations.pageSubtitle[lang];
+                document.getElementById('locationTitle').textContent = translations.locationTitle[lang];
+                document.getElementById('locationInput').placeholder = translations.locationPlaceholder[lang];
+                document.getElementById('getLocationBtn').textContent = translations.getLocationBtn[lang];
+                document.getElementById('locationAnalysisTitle').textContent = translations.locationAnalysisTitle[lang];
+                document.getElementById('cropAnalysisSectionTitle').textContent = translations.cropAnalysisSectionTitle[lang];
+                document.getElementById('dragDropText').textContent = translations.dragDropText[lang];
+                runAgentBtn.textContent = translations.analyzeBtn[lang];
+                document.getElementById('analysisTitle').textContent = translations.analysisTitle[lang];
+                agentOutputDiv.innerHTML = `<p>${translations.initialAnalysisText[lang]}</p>`;
+            }
+
+            langButtons.forEach(button => {
+                button.addEventListener('click', () => {
+                    try {
+                        const selectedLang = button.dataset.lang;
+                        changeLanguage(selectedLang);
+                    } catch (error) {
+                        console.error("An error occurred while changing the language:", error);
+                    } finally {
+                        languageModal.classList.add('hidden');
+                        mainContainer.classList.remove('hidden');
+                    }
+                });
+            });
+
+            // --- API AND APP LOGIC ---
+            // OpenWeatherMap Key (You might want to secure this too in production, but okay for frontend demos)
+            const openWeatherMapKey = '3cdf82ec26718bc89455747eb7eef15f';
+
+            function getGeminiUrl(key) {
+                // CHANGED: Using the Stable 'gemini-2.5-flash' model
+                return `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${key}`;
+            }
+
+            function showLoading(button, loadingText) {
+                button.disabled = true;
+                button.innerHTML = `
+                    <svg class="animate-spin -ml-1 mr-3 h-4 w-4 text-white inline" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                    ${loadingText}
+                `;
+            }
+
+            function hideLoading(button, originalText) {
+                button.disabled = false;
+                button.innerHTML = originalText;
+            }
+
+            function formatApiResponse(text) {
+                let processedText = text.replace(/\*\*(.*?)\*\*/g, '<strong class="font-semibold text-white">$1</strong>');
+                return processedText.split('\n').map(line => {
+                    line = line.trim();
+                    if (line.startsWith('### ')) {
+                        return `<h3 class="text-base font-bold text-white mt-4 mb-2">${line.substring(4)}</h3>`;
+                    }
+                    if (line.startsWith('<strong>') && line.endsWith('</strong>') && (line.match(/<strong>/g) || []).length === 1) {
+                        const headingText = line.substring(8, line.length - 9);
+                        return `<h3 class="text-base font-bold text-white mt-4 mb-2">${headingText}</h3>`;
+                    }
+                    if (line.startsWith('* ')) {
+                        return `<li class="list-disc list-inside ml-2 text-gray-300 mb-1">${line.substring(2)}</li>`;
+                    }
+                    if (line === '') {
+                        return '';
+                    }
+                    return `<p class="mb-2 text-gray-300">${line}</p>`;
+                }).join('');
+            }
+
+            async function callGeminiAPI(payload, outputDiv) {
+                if(!userApiKey || userApiKey === 'PASTE_YOUR_API_KEY_HERE') {
+                    outputDiv.innerHTML = `<p class="text-red-500 font-bold">Error: Please add your API Key in the code (line ~258) to make the app work.</p>`;
+                    return;
+                }
+
+                try {
+                    const response = await fetch(getGeminiUrl(userApiKey), {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(payload)
+                    });
+
+                    const result = await response.json();
+
+                    if (!response.ok) {
+                        const errorMsg = result.error ? result.error.message : response.statusText;
+                        throw new Error(`API Error (${response.status}): ${errorMsg}`);
+                    }
+
+                    const text = result.candidates?.[0]?.content?.parts?.[0]?.text || "No response received.";
+                    outputDiv.innerHTML = formatApiResponse(text);
+
+                } catch (error) {
+                    console.error("Failed to fetch from API:", error);
+                    outputDiv.innerHTML = `<p class="text-red-400 text-xs bg-red-900/20 p-2 rounded border border-red-800"><strong>Error:</strong> ${error.message}</p>`;
+                }
+            }
+            
+            async function getAgentResponse(image) {
+                if (!forecastData) {
+                    agentOutputDiv.innerHTML = `<p class="text-amber-400 text-sm">Please get location info first to load the weather forecast.</p>`;
+                    return;
+                }
+                showLoading(runAgentBtn, translations.analyzingBtn[currentLanguage]);
+                
+                const location = locationInput.value.trim();
+                const lang = currentLanguage;
+
+                let forecastString = `${translations.forecastPrompt[lang]}\n`;
+                forecastData.forEach(day => {
+                    forecastString += `- ${day.date}: Temp ${day.minTemp}°C to ${day.maxTemp}°C, Humidity ${day.humidity}%, ${day.description}\n`;
+                });
+
+                let prompt = `${translations.promptIntro[lang]} `;
+                if (location) {
+                    prompt += `${translations.locationPrompt[lang]} "${location}".\n`;
+                }
+                prompt += forecastString;
+                prompt += `\n${translations.promptStructure[lang]} ${translations.promptClarityInstruction[lang]}\n
+                1.  **${translations.promptOverview[lang]}**
+                2.  **${translations.promptProblems[lang]}**
+                3.  **${translations.promptSolutions[lang]}**
+                4.  **${translations.promptFollowUp[lang]}**`;
+
+                const payload = {
+                    contents: [{
+                        role: "user",
+                        parts: [
+                            { text: prompt },
+                            { inlineData: { mimeType: "image/jpeg", data: image } }
+                        ]
+                    }],
+                };
+
+                await callGeminiAPI(payload, agentOutputDiv);
+                hideLoading(runAgentBtn, translations.analyzeBtn[currentLanguage]);
+            }
+            
+            function renderWeatherChart(processedData) {
+                if (weatherChart) {
+                    weatherChart.destroy();
+                }
+                const ctx = document.getElementById('weatherChart').getContext('2d');
+                const labels = processedData.map(d => new Date(d.date).toLocaleDateString(currentLanguage, { weekday: 'short', day: 'numeric'}));
+                
+                weatherChart = new Chart(ctx, {
+                    type: 'bar',
+                    data: {
+                        labels: labels,
+                        datasets: [
+                            {
+                                label: 'Max Temp (°C)',
+                                data: processedData.map(d => d.maxTemp),
+                                type: 'line',
+                                borderColor: '#f97316', // orange-500
+                                backgroundColor: '#f97316',
+                                yAxisID: 'y_temp',
+                            },
+                            {
+                                label: 'Min Temp (°C)',
+                                data: processedData.map(d => d.minTemp),
+                                type: 'line',
+                                borderColor: '#facc15', // yellow-400
+                                backgroundColor: '#facc15',
+                                yAxisID: 'y_temp',
+                            },
+                            {
+                                label: 'Humidity (%)',
+                                data: processedData.map(d => d.humidity),
+                                backgroundColor: 'rgba(34, 197, 94, 0.5)', // green-500
+                                yAxisID: 'y_humidity',
+                            }
+                        ]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        scales: {
+                            y_temp: {
+                                type: 'linear',
+                                position: 'left',
+                                title: { display: true, text: 'Temperature (°C)', color: '#d4d4d2' },
+                                ticks: { color: '#d4d4d2' },
+                                grid: { color: 'rgba(212, 212, 210, 0.2)'}
+                            },
+                            y_humidity: {
+                                type: 'linear',
+                                position: 'right',
+                                title: { display: true, text: 'Humidity (%)', color: '#d4d4d2' },
+                                ticks: { color: '#d4d4d2' },
+                                grid: { drawOnChartArea: false } // only draw grid for temp
+                            },
+                            x: {
+                                ticks: { color: '#d4d4d2' },
+                                grid: { color: 'rgba(212, 212, 210, 0.2)'}
+                            }
+                        },
+                        plugins: {
+                            legend: {
+                                labels: { color: '#d4d4d2' }
+                            }
+                        }
+                    }
+                });
+            }
+
+            // --- MAP FUNCTIONALITY ---
+            function initMap(lat, lon) {
+                if (mapInstance) {
+                    mapInstance.remove();
+                }
+                
+                mapInstance = L.map('map').setView([lat, lon], 13);
+
+                L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+                    attribution: 'Tiles &copy; Esri &mdash; Source: Esri, i-cubed, USDA, USGS, AEX, GeoEye, Getmapping, Aerogrid, IGN, IGP, UPR-EGP, and the GIS User Community'
+                }).addTo(mapInstance);
+
+                L.marker([lat, lon]).addTo(mapInstance)
+                    .bindPopup('Approximate Location')
+                    .openPopup();
+                
+                setTimeout(() => { mapInstance.invalidateSize(); }, 100);
+            }
+
+            async function fetchWeatherData(location) {
+                try {
+                    const response = await fetch(`https://api.openweathermap.org/data/2.5/forecast?q=${location}&appid=${openWeatherMapKey}&units=metric&lang=${currentLanguage}`);
+                    if (!response.ok) throw new Error('Weather data not found.');
+                    const data = await response.json();
+
+                    if(data.city && data.city.coord) {
+                        initMap(data.city.coord.lat, data.city.coord.lon);
+                    }
+
+                    // Process data for daily forecast
+                    const dailyData = {};
+                    data.list.forEach(item => {
+                        const date = item.dt_txt.split(' ')[0];
+                        if (!dailyData[date]) {
+                            dailyData[date] = {
+                                temps: [],
+                                humidities: [],
+                                descriptions: {},
+                                icons: {}
+                            };
+                        }
+                        dailyData[date].temps.push(item.main.temp);
+                        dailyData[date].humidities.push(item.main.humidity);
+                        const desc = item.weather[0].description;
+                        const icon = item.weather[0].icon;
+                        dailyData[date].descriptions[desc] = (dailyData[date].descriptions[desc] || 0) + 1;
+                        dailyData[date].icons[icon] = (dailyData[date].icons[icon] || 0) + 1;
+                    });
+
+                    const processedData = Object.keys(dailyData).map(date => {
+                        const day = dailyData[date];
+                        const mostCommonDesc = Object.keys(day.descriptions).reduce((a, b) => day.descriptions[a] > day.descriptions[b] ? a : b);
+                        const mostCommonIcon = Object.keys(day.icons).reduce((a, b) => day.icons[a] > day.icons[b] ? a : b);
+                        return {
+                            date: date,
+                            minTemp: Math.round(Math.min(...day.temps)),
+                            maxTemp: Math.round(Math.max(...day.temps)),
+                            humidity: Math.round(day.humidities.reduce((a,b) => a+b) / day.humidities.length),
+                            description: mostCommonDesc,
+                            icon: mostCommonIcon,
+                        };
+                    }).slice(0, 5); 
+
+                    forecastData = processedData; 
+
+                    let forecastHTML = `
+                        <h4 class="text-sm font-semibold text-gray-200 mb-2">${translations.weatherTitle[currentLanguage]}</h4>
+                        <div class="mb-3 h-48"><canvas id="weatherChart"></canvas></div>
+                        <div class="grid grid-cols-5 gap-1 text-center">
+                    `;
+                    processedData.forEach(day => {
+                        forecastHTML += `
+                            <div class="bg-white/5 p-1 rounded-lg">
+                                <p class="font-medium text-[10px]">${new Date(day.date).toLocaleDateString(currentLanguage, { weekday: 'short' })}</p>
+                                <img src="https://openweathermap.org/img/wn/${day.icon}.png" alt="${day.description}" class="mx-auto w-8 h-8">
+                                <p class="text-[10px]">${day.minTemp}°/${day.maxTemp}°</p>
+                            </div>
+                        `;
+                    });
+                    forecastHTML += `</div>`;
+                    weatherOutput.innerHTML = forecastHTML;
+
+                    renderWeatherChart(processedData);
+
+                    return processedData;
+                } catch (error) {
+                    weatherOutput.innerHTML = `<p class="text-yellow-500 text-xs">Could not load weather forecast.</p>`;
+                    console.error("Weather API error:", error);
+                    return null;
+                }
+            }
+
+
+            async function fetchLocationDetails() {
+                const location = locationInput.value.trim();
+                if (!location) return;
+
+                showLoading(getLocationBtn, translations.gettingLocationInfo[currentLanguage]);
+                locationOutputArea.classList.remove('hidden');
+                locationOutput.innerHTML = `<p class="text-xs">${translations.gettingLocationInfo[currentLanguage]}</p>`;
+                weatherOutput.innerHTML = '';
+
+                const lang = currentLanguage;
+                const textPrompt = `${translations.locationProfilePrompt[lang].replace('{location}', location)}`;
+                const textPayload = { contents: [{ parts: [{ text: textPrompt }] }] };
+                
+                await fetchWeatherData(location);
+                await callGeminiAPI(textPayload, locationOutput);
+                
+                hideLoading(getLocationBtn, translations.getLocationBtn[currentLanguage]);
+            }
+
+            getLocationBtn.addEventListener('click', fetchLocationDetails);
+            
+            runAgentBtn.addEventListener('click', () => {
+                if (uploadedImageBase64) {
+                    getAgentResponse(uploadedImageBase64);
+                } else {
+                    agentOutputDiv.textContent = "Please upload an image first.";
+                }
+            });
+
+            function handleFile(file) {
+                if (file && file.type.startsWith('image/')) {
+                    const reader = new FileReader();
+                    reader.onloadend = () => {
+                        uploadedImageBase64 = reader.result.split(',')[1];
+                        imagePreview.src = reader.result;
+                        imageFileName.textContent = file.name;
+                        imagePreviewContainer.classList.remove('hidden');
+                        runAgentBtn.disabled = false;
+                        agentOutputDiv.innerHTML = `<p>${translations.imageUploadedText[currentLanguage]}</p>`;
+                    };
+                    reader.readAsDataURL(file);
+                }
+            }
+
+            imageInput.addEventListener('change', (e) => handleFile(e.target.files[0]));
+            
+            ['dragover', 'dragleave', 'drop'].forEach(eventName => {
+                fileUploadBox.addEventListener(eventName, e => { e.preventDefault(); e.stopPropagation(); });
+            });
+
+            fileUploadBox.addEventListener('dragover', () => fileUploadBox.classList.add('dragging'));
+            fileUploadBox.addEventListener('dragleave', () => fileUploadBox.classList.remove('dragging'));
+            fileUploadBox.addEventListener('drop', e => {
+                fileUploadBox.classList.remove('dragging');
+                handleFile(e.dataTransfer.files[0]);
+            });
+            fileUploadBox.addEventListener('click', () => imageInput.click());
+        });
+    </script>
+</body>
+</html>
