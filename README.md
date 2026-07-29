@@ -36,7 +36,7 @@ If you wish to use this software, source code, or any associated assets for your
 
 <p align="center">
 
-  <img src="screenshots/1.jpeg" width="220"/>
+  <img src="screenshots/1st.jpeg" width="220"/>
 
   <img src="screenshots/2.jpeg" width="220"/>
 
